@@ -1,10 +1,9 @@
 #!/bin/sh
 
-t="$(realpath "$(dirname "$0")")"
-cd "$t/.."
+cd "$(realpath "$(dirname "$0")")"
 
 if [ $# -eq 0 ]
-then set -- "$t"/*/
+then set -- "$PWD"/t/*/
 fi
 
 eval 'xargs_py() {' "$(realpath ./xargs.py)" '"$@";' '}'
@@ -15,10 +14,11 @@ do
 	stdin="$test/stdin"
 	stdout="_tmp/$(basename "$test")_stdout"
 	stderr="_tmp/$(basename "$test")_stderr"
-	eval xargs $(cat "$args") <"$stdin" >"${stdout}_expected"
-	rc_expected=$?
+	eval xargs $(cat "$args") <"$stdin" >"${stdout}_expected" 2>/dev/null &
 	eval xargs_py $(cat "$args") <"$test/stdin" >"${stdout}_actual" 2>"$stderr"
 	rc_actual=$?
+	wait %1
+	rc_expected=$?
 	if ! cmp -s "${stdout}_expected" "${stdout}_actual"
 	then
 		echo "!!! $(basename "$test") failed: files differ"
