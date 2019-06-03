@@ -38,18 +38,22 @@ xargs.add_argument('initial_arguments', nargs=argparse.REMAINDER)
 ArgWithInfo = collections.namedtuple('ArgWithInfo', 'arg, charc, argc, linec')
 
 def str_memsize(*strings):
+	# type: (*str) -> int
 	"""Calculate the amount of memory required to store the strings in an argv."""
 	return sum(len(s) + 1 for s in strings)
 
 def read_lines_eof(eof_str, input):
+	# type (str, Iterable[str]) -> Iterable[str]
 	"""Read lines from input until a line equals eof_str or EOF is reached"""
 	eof_str = eof_str + '\n'
 	return itertools.takewhile(lambda l: l != eof_str, input)
 
 def is_complete_line(line):
+	# type: (str) -> bool
 	return len(line) > 1 and line[-2] not in (' ', '\t')
 
 def argsplit_ws(lines):
+	# type: (Iterable[str]) -> Iterator[ArgWithInfo]
 	"""Split lines into arguments and append metainfo to each argument."""
 	charc = 0
 	argc = 0
@@ -64,6 +68,7 @@ def argsplit_ws(lines):
 			linec += 1
 
 def argsplit_delim(delim, lines):
+	# type: (str, Iterable[str]) -> Iterator[ArgWithInfo]
 	"""Split lines into arguments and append metainfo to each argument."""
 	charc = 0
 	argc = 0
@@ -85,6 +90,7 @@ def argsplit_delim(delim, lines):
 		yield ArgWithInfo(arg, charc, argc, linec)
 
 def group_args(max_chars, max_args, max_lines, arg_iter):
+	# type: (Optional[int], Optional[int], Optional[int], Iterator[ArgWithInfo]) -> Iterator[Iterator[str]]
 	"""
 	Group arguments from arg_iter, so that no group exceeds either
 	max_chars, max_args or max_lines.
@@ -105,6 +111,7 @@ def group_args(max_chars, max_args, max_lines, arg_iter):
 		yield arggroup
 
 def replace_args(initial_arguments, replace_str, additional_arguments):
+	# type: (Sequence[str], str, Iterable[str]) -> Iterator[str]
 	additional_arguments = list(additional_arguments)
 	for arg in initial_arguments:
 		if arg == replace_str:
@@ -114,6 +121,7 @@ def replace_args(initial_arguments, replace_str, additional_arguments):
 			yield arg
 
 def build_cmdlines_replace(command, initial_arguments, replace_str, arggroup_iter):
+	# type: (str, Sequence[str], str, Iterator[Iterator[str]]) -> Iterator[Iterator[str]]
 	"""
 	Build command-lines suitable for subprocess.Popen,
 	replacing instances of replace_str in initial_arguments.
@@ -131,6 +139,7 @@ def build_cmdlines_replace(command, initial_arguments, replace_str, arggroup_ite
 		yield cmdline
 
 def build_cmdlines(command, initial_arguments, arggroup_iter):
+	# type: (str, Sequence[str], Iterator[Iterator[str]]) -> Iterator[Iterator[str]]
 	"""Build command-lines suitable for subprocess.Popen."""
 	command = [command]
 	for additional_arguments in arggroup_iter:
@@ -142,6 +151,7 @@ def build_cmdlines(command, initial_arguments, arggroup_iter):
 		yield cmdline
 
 def prompt_user(interactive, cmdline_iter):
+	# type: (bool, Iterator[Iterator[str]]) -> Iterator[List[str]]
 	"""
 	Go over each cmdline and print them to stderr.
 	If interactive is True, prompt the user for each invocation.
@@ -159,6 +169,7 @@ def prompt_user(interactive, cmdline_iter):
 		yield cmdline
 
 def wait_open_slot(processes):
+	# type: (List[Optional[Any]])-> int
 	while processes:
 		for i, p in enumerate(processes):
 			# process doesn't yet exist or has finished
@@ -167,6 +178,7 @@ def wait_open_slot(processes):
 		os.wait()
 
 def map_errcode(rc):
+	# type: int -> int
 	"""map the returncode of a child-process to the returncode of the main process."""
 	if rc == 0:
 		return 0
