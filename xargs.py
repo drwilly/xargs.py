@@ -105,8 +105,8 @@ def group_args(max_chars, max_args, max_lines, arg_iter):
 	arggroup_iter = ((m.arg for m in g) for _, g in itertools.groupby(arg_iter, kf))
 	# if there is no input, return an empty group
 	# to run the command without additional arguments
-	arggroup = next(arggroup_iter, None)
-	yield arggroup if arggroup is not None else []
+	arggroup = next(arggroup_iter, [])
+	yield arggroup
 	for arggroup in arggroup_iter:
 		yield arggroup
 
