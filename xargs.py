@@ -45,8 +45,7 @@ def str_memsize(*strings):
 def read_lines_eof(eof_str, input):
 	# type (str, Iterable[str]) -> Iterable[str]
 	"""Read lines from input until a line equals eof_str or EOF is reached"""
-	eof_str = eof_str + '\n'
-	return itertools.takewhile(lambda l: l != eof_str, input)
+	return iter(input.next, eof_str + '\n')
 
 def is_complete_line(line):
 	# type: (str) -> bool
