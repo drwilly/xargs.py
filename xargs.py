@@ -12,18 +12,40 @@ import shlex
 import subprocess
 import sys
 
+class GNUXargsQuirks(argparse.Action):
+	def __init__(self, option_strings, dest, **kwargs):
+		super(GNUXargsQuirks, self).__init__(option_strings, dest, **kwargs)
+	def __call__(self, parser, namespace, values, option_string=None):
+		setattr(namespace, self.dest, values)
+		if self.dest == 'replace_str':
+			namespace.max_args = None
+			namespace.max_lines = None
+		elif self.dest == 'max_lines':
+			namespace.max_args = None
+			namespace.replace_str = None
+		elif self.dest == 'max_args':
+			namespace.max_lines = None
+			if namespace.max_args == 1 and namespace.replace_str:
+				namespace.max_args = None
+			else:
+				namespace.replace_str = None
+		elif self.dest == 'max_chars':
+			pass
+		else:
+			assert False, "dest '%s' not handled" % self.dest
+
 xargs = argparse.ArgumentParser(prog='xargs')
 xargs.add_argument('-a', '--arg-file', metavar='file', nargs=1, default='-', help='read arguments from FILE, not standard input')
 xargs.add_argument('-E', metavar='eof-str', dest='eof_str', help='set logical EOF string; if END occurs as a line of input, the rest of the input is ignored (ignored if -0 or -d was specified)')
 xargs.add_argument('-e', '--eof', metavar='eof-str', nargs='?', dest='eof_str', help='equivalent to -E END if END is specified; otherwise, there is no end-of-file string')
 xargs.add_argument('-0', '--null', dest='delimiter', action='store_const', const='\0', help='items are separated by a null, not whitespace; disables quote and backslash processing and logical EOF processing')
 xargs.add_argument('-d', '--delimiter', metavar='delimiter', dest='delimiter', help='items in input stream are separated by CHARACTER, not by whitespace; disables quote and backslash processing and logical EOF processing')
-xargs.add_argument('-I', metavar='replace-str', dest='replace_str', help='same as --replace=R')
-xargs.add_argument('-i', '--replace', metavar='replace-str', nargs='?', const='{}', dest='replace_str', help='replace R in INITIAL-ARGS with names read from standard input; if R is unspecified, assume {}')
-xargs.add_argument('-L', metavar='max-lines', dest='max_lines', type=int, help='use at most MAX-LINES non-blank input lines per command line')
-xargs.add_argument('-l', '--max-lines', metavar='max-lines', nargs='?', const=1, dest='max_lines', type=int, help='similar to -L but defaults to at most one non-blank input line if MAX-LINES is not specified')
-xargs.add_argument('-n', '--max-args', metavar='max-args', dest='max_args', type=int, help='use at most MAX-ARGS arguments per command line')
-xargs.add_argument('-s', '--max-chars', metavar='max-chars', dest='max_chars', type=int, help='limit length of command line to MAX-CHARS')
+xargs.add_argument('-I', metavar='replace-str', dest='replace_str', action=GNUXargsQuirks, help='same as --replace=R')
+xargs.add_argument('-i', '--replace', metavar='replace-str', nargs='?', const='{}', dest='replace_str', action=GNUXargsQuirks, help='replace R in INITIAL-ARGS with names read from standard input; if R is unspecified, assume {}')
+xargs.add_argument('-L', metavar='max-lines', dest='max_lines', type=int, action=GNUXargsQuirks, help='use at most MAX-LINES non-blank input lines per command line')
+xargs.add_argument('-l', '--max-lines', metavar='max-lines', nargs='?', const=1, dest='max_lines', type=int, action=GNUXargsQuirks, help='similar to -L but defaults to at most one non-blank input line if MAX-LINES is not specified')
+xargs.add_argument('-n', '--max-args', metavar='max-args', dest='max_args', type=int, action=GNUXargsQuirks, help='use at most MAX-ARGS arguments per command line')
+xargs.add_argument('-s', '--max-chars', metavar='max-chars', dest='max_chars', type=int, action=GNUXargsQuirks, help='limit length of command line to MAX-CHARS')
 xargs.add_argument('-P', '--max-procs', metavar='max-procs', default=1, dest='max_procs', type=int, help='run at most MAX-PROCS processes at a time')
 xargs.add_argument('--process-slot-var', metavar='name', help='set environment variable VAR in child processes')
 xargs.add_argument('-p', '--interactive', action='store_true', help='prompt before running commands')
