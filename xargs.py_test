@@ -3,7 +3,7 @@
 cd "$(realpath "$(dirname "$0")")"
 
 if [ $# -eq 0 ]
-then set -- "$PWD"/t/*/
+then set -- "$PWD"/xargs.py_test_input/*/
 fi
 
 eval 'xargs_py() {' "$(realpath ./xargs.py)" '"$@";' '}'
