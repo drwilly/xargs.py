@@ -142,15 +142,14 @@ def replace_args(initial_arguments, replace_str, additional_arguments):
 			yield arg
 
 def build_cmdlines_replace(command, initial_arguments, replace_str, arggroup_iter):
-	# type: (str, Sequence[str], str, Iterator[Iterator[str]]) -> Iterator[Iterator[str]]
+	# type: (str, Sequence[str], str, Iterator[Iterator[str]]) -> Iterator[List[str]]
 	"""
 	Build command-lines suitable for subprocess.Popen,
 	replacing instances of replace_str in initial_arguments.
 	"""
-	command = [command]
+	cmdline = [command]
 	for additional_arguments in arggroup_iter:
-		cmdline = itertools.chain(
-			command,
+		cmdline.extend(
 			replace_args(
 				initial_arguments,
 				replace_str,
@@ -158,27 +157,25 @@ def build_cmdlines_replace(command, initial_arguments, replace_str, arggroup_ite
 			)
 		)
 		yield cmdline
+		cmdline = cmdline[:1]
 
 def build_cmdlines(command, initial_arguments, arggroup_iter):
-	# type: (str, Sequence[str], Iterator[Iterator[str]]) -> Iterator[Iterator[str]]
+	# type: (str, Sequence[str], Iterator[Iterator[str]]) -> Iterator[List[str]]
 	"""Build command-lines suitable for subprocess.Popen."""
-	command = [command]
+	cmdline = [command]
+	cmdline.extend(initial_arguments)
 	for additional_arguments in arggroup_iter:
-		cmdline = itertools.chain(
-			command,
-			initial_arguments,
-			additional_arguments
-		)
+		cmdline.extend(additional_arguments)
 		yield cmdline
+		cmdline = cmdline[:1+len(initial_arguments)]
 
 def prompt_user(interactive, cmdline_iter):
-	# type: (bool, Iterator[Iterator[str]]) -> Iterator[List[str]]
+	# type: (bool, Iterator[List[str]]) -> Iterator[List[str]]
 	"""
 	Go over each cmdline and print them to stderr.
 	If interactive is True, prompt the user for each invocation.
 	"""
 	for cmdline in cmdline_iter:
-		cmdline = list(cmdline)
 		if interactive:
 			print(*cmdline, end=' ?...', file=sys.stderr)
 			with open("/dev/tty", 'r') as tty:
