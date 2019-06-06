@@ -275,7 +275,6 @@ def main(xargs_args):
 		for cmdline in cmdline_iter:
 			i = wait_open_slot(ps)
 			if ps[i] is not None and ps[i].returncode:
-				err = map_errcode(ps[i].returncode)
 				break
 			if xargs_args.process_slot_var:
 				environ[xargs_args.process_slot_var] = str(i)
