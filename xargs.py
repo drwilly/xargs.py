@@ -261,11 +261,9 @@ def main(xargs_args):
 			arggroup_iter
 		)
 
-	if xargs_args.replace_str and xargs_args.max_chars:
-		cmdline = list(cmdline)
-		# -I implies -x
-		if str_memsize(*cmdline) > xargs_args.max_chars:
-			return 1
+	if xargs_args.max_chars and xargs_args.exit:
+		cmdline_iter = itertools.takewhile(lambda c: str_memsize(*c) < xargs_args.max_chars, cmdline_iter)
+		# TODO return 1 if cmdline has been dropped
 
 	if xargs_args.verbose:
 		cmdline_iter = prompt_user(xargs_args.interactive, cmdline_iter)
