@@ -193,7 +193,7 @@ def wait_open_slot(processes):
 			# process doesn't yet exist or has finished
 			if p is None or p.poll() is not None:
 				return i
-		os.wait()
+		_pid, _err = os.wait()
 
 def map_errcode(rc):
 	# type: int -> int
