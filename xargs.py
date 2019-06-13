@@ -169,22 +169,23 @@ def build_cmdlines(command, initial_arguments, arggroup_iter):
 		yield cmdline
 		cmdline = cmdline[:1+len(initial_arguments)]
 
-def prompt_user(interactive, cmdline_iter):
-	# type: (bool, Iterator[List[str]]) -> Iterator[List[str]]
-	"""
-	Go over each cmdline and print them to stderr.
-	If interactive is True, prompt the user for each invocation.
-	"""
+def tee_cmdline(cmdline_iter):
+	# type: (Iterator[List[str]]) -> Iterator[List[str]]
+	"""Go over each cmdline and print them to stderr."""
 	for cmdline in cmdline_iter:
-		if interactive:
-			print(*cmdline, end=' ?...', file=sys.stderr)
-			with open("/dev/tty", 'r') as tty:
-				response = tty.readline()
-				if response[0] not in ('y', 'Y'):
-					continue
-		else:
-			print(*cmdline, file=sys.stderr)
+		print(*cmdline, file=sys.stderr)
 		yield cmdline
+
+def prompt_user(cmdline_iter):
+	# type: (Iterator[List[str]]) -> Iterator[List[str]]
+	"""Prompt the user for each cmdline."""
+	with open("/dev/tty", 'r') as tty:
+		for cmdline in cmdline_iter:
+			print(*cmdline, end=' ?...', file=sys.stderr)
+			response = tty.readline()
+			if response[0] not in ('y', 'Y'):
+				continue
+			yield cmdline
 
 def wait_open_slot(processes):
 	# type: (List[Optional[Any]])-> int
@@ -265,8 +266,10 @@ def main(xargs_args):
 		cmdline_iter = itertools.takewhile(lambda c: str_memsize(*c) < xargs_args.max_chars, cmdline_iter)
 		# TODO return 1 if cmdline has been dropped
 
-	if xargs_args.verbose:
-		cmdline_iter = prompt_user(xargs_args.interactive, cmdline_iter)
+	if xargs_args.interactive:
+		cmdline_iter = prompt_user(cmdline_iter)
+	elif xargs_args.verbose:
+		cmdline_iter = tee_cmdline(cmdline_iter)
 
 	# phase 5: execute command-lines
 	if xargs_args.max_procs > 1:
