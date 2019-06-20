@@ -310,10 +310,10 @@ if __name__ == "__main__":
 	if xargs_args.delimiter and xargs_args.eof_str:
 		xargs_args.eof_str = None
 	# -I implies -L 1 (and transitively -x)
-	# -I implies -d '\n'
-	# TODO? -I implies -r (undocumented)
 	if xargs_args.replace_str and xargs_args.max_lines != 1:
 		xargs_args.max_lines = 1
+	# -I implies -d '\n'
+	if xargs_args.replace_str and xargs_args.delimiter != '\n':
 		xargs_args.delimiter = '\n'
 	# -L implies -x
 	if xargs_args.max_lines is not None and not xargs_args.exit:
