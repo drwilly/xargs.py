@@ -57,79 +57,105 @@ xargs.add_argument('--version', action='version', version='%(prog)s 0.0.1', help
 xargs.add_argument('command', nargs='?', default='echo')
 xargs.add_argument('initial_arguments', nargs=argparse.REMAINDER)
 
-ArgWithInfo = collections.namedtuple('ArgWithInfo', 'arg, charc, argc, linec')
-
-def str_memsize(*strings):
-	# type: (*str) -> int
-	"""Calculate the amount of memory required to store the strings in an argv."""
-	return sum(len(s) + 1 for s in strings)
+class PeekableIterator():
+	def __init__(self, iterator):
+		self.iterator = iterator
+		self.peeked = False
+		self.item = None
+	def peek(self):
+		"""
+		Return the next item but does not advance the iterator further.
+		Raise StopIteration if there is no such item.
+		"""
+		if not self.peeked:
+			self.item = next(self.iterator)
+			self.peeked = True
+		return self.item
+	def next(self):
+		"""
+		Return the next item and advance the iterator.
+		Raise StopIteration if there is no such item.
+		"""
+		if self.peeked:
+			self.peeked = False
+			return self.item
+		return next(self.iterator)
+	def __iter__(self):
+		return self
 
 def read_lines_eof(eof_str, input):
 	# type (str, Iterable[str]) -> Iterable[str]
 	"""Read lines from input until a line equals eof_str or EOF is reached"""
 	return iter(input.next, eof_str + '\n')
 
+def str_memsize(*strings):
+	# type: (*str) -> int
+	"""Calculate the amount of memory required to store the strings in an argv."""
+	return sum(len(s) + 1 for s in strings)
+
 def is_complete_line(line):
 	# type: (str) -> bool
 	return len(line) > 1 and line[-2] not in (' ', '\t')
 
 def argsplit_ws(lines):
-	# type: (Iterable[str]) -> Iterator[ArgWithInfo]
+	# type: (Iterable[str]) -> Iterator[str]
 	"""Split lines into arguments and append metainfo to each argument."""
-	charc = 0
-	argc = 0
-	linec = 0
 	for line in lines:
 		# TODO this might require some more testing
 		for arg in shlex.split(line):
-			charc += str_memsize(arg)
-			yield ArgWithInfo(arg, charc, argc, linec)
-			argc += 1
-		if is_complete_line(line):
-			linec += 1
+			yield arg
 
 def argsplit_delim(delim, lines):
-	# type: (str, Iterable[str]) -> Iterator[ArgWithInfo]
+	# type: (str, Iterable[str]) -> Iterator[str]
 	"""Split lines into arguments and append metainfo to each argument."""
-	charc = 0
-	argc = 0
-	linec = 0
 	buf = []
 	for c in itertools.chain.from_iterable(lines):
 		if c == delim:
-			arg = "".join(buf)
-			charc += str_memsize(arg)
-			yield ArgWithInfo(arg, charc, argc, linec)
-			argc += 1
-			linec += 1
+			yield "".join(buf)
 			buf = []
 		else:
 			buf.append(c)
 	if buf:
-		arg = "".join(buf)
-		charc += str_memsize(arg)
-		yield ArgWithInfo(arg, charc, argc, linec)
+		yield "".join(buf)
 
-def group_args(max_chars, max_args, max_lines, arg_iter):
-	# type: (Optional[int], Optional[int], Optional[int], Iterator[ArgWithInfo]) -> Iterator[Iterator[str]]
-	"""
-	Group arguments from arg_iter, so that no group exceeds either
-	max_chars, max_args or max_lines.
-	"""
-	def kf(a):
-		return (
-			(a.charc-1) / max_chars if max_chars else None,
-			a.argc / max_args if max_args else None,
-			a.linec / max_lines if max_lines else None,
-		)
-	# group args and drop meta-info
-	arggroup_iter = ((m.arg for m in g) for _, g in itertools.groupby(arg_iter, kf))
-	# if there is no input, return an empty group
-	# to run the command without additional arguments
-	arggroup = next(arggroup_iter, [])
-	yield arggroup
-	for arggroup in arggroup_iter:
-		yield arggroup
+def read_n_xargs_lines(linec, line_iter):
+	# type: (int, Iterator[str]) -> Iterator[str]
+	while linec > 0:
+		line = next(line_iter)
+		yield line
+		if is_complete_line(line):
+			linec -= 1
+
+def take_chars(charc, iterator):
+	# type: (int, Iterator[str]) -> Iterator[str]
+	charc -= str_memsize(iterator.peek())
+	while charc >= 0:
+		yield next(iterator)
+		charc -= str_memsize(iterator.peek())
+
+def take(n, iterator):
+	# type: (int, Iterator[Any]) -> Iterator[Any]
+	for _ in range(n):
+		yield next(iterator)
+
+def group_args_lines(max_lines, input):
+	# type: (int, Iterator[str]) -> Iterator[List[str]]
+	while True:
+		it = argsplit_ws(read_n_xargs_lines(max_lines, input))
+		buf = [next(it)] # raise StopIteration if iterator is empty
+		buf.extend(it)
+		yield buf
+
+def group_args(max_chars, max_args, arg_iter):
+	# type: (Optional[int], Optional[int], Iterator[str]) -> Iterator[List[str]]
+	arg_iter = PeekableIterator(arg_iter)
+	while arg_iter.peek() or True: # raise StopIteration if iterator is empty
+		it = arg_iter
+		if max_chars:
+			it = take_chars(max_chars, it)
+		if max_args:
+			it = take(max_args, it)
+		yield list(it)
 
 def replace_args(initial_arguments, replace_str, additional_arguments):
 	# type: (Sequence[str], str, Iterable[str]) -> Iterator[str]
@@ -168,6 +194,13 @@ def build_cmdlines(command, initial_arguments, arggroup_iter):
 		cmdline.extend(additional_arguments)
 		yield cmdline
 		cmdline = cmdline[:1+len(initial_arguments)]
+
+def check_items(p, on_false, cmdline_iter):
+	for cmdline in cmdline_iter:
+		if p(cmdline):
+			yield cmdline
+		else:
+			on_false()
 
 def tee_cmdline(cmdline_iter):
 	# type: (Iterator[List[str]]) -> Iterator[List[str]]
@@ -221,33 +254,47 @@ def main(xargs_args):
 	if xargs_args.eof_str:
 		xargs_input = read_lines_eof(xargs_args.eof_str, xargs_input)
 
-	# phase 2: split args
-	if xargs_args.delimiter:
-		arg_iter = argsplit_delim(xargs_args.delimiter, xargs_input)
+	# phase 2: parse and group args
+	if xargs_args.max_lines:
+		assert not xargs_args.max_args
+		assert not xargs_args.delimiter
+		assert xargs_args.exit
+		arggroup_iter = group_args_lines(xargs_args.max_lines, xargs_input)
 	else:
-		arg_iter = argsplit_ws(xargs_input)
+		if xargs_args.delimiter:
+			arg_iter = argsplit_delim(xargs_args.delimiter, xargs_input)
+		else:
+			arg_iter = argsplit_ws(xargs_input)
+		# if exit is True, max_chars is checked later
+		arggroup_iter = group_args(
+			xargs_args.max_chars if not xargs_args.exit else None,
+			xargs_args.max_args,
+			arg_iter
+		)
 
+	arggroup_iter = PeekableIterator(arggroup_iter)
 	if xargs_args.no_run_if_empty:
-		arg = next(arg_iter, None)
-		if arg is None:
+		try:
+			x = arggroup_iter.peek()
+			# TODO not even sure how the interaction with -I is supposed to work
+			# echo   | xargs -I {} echo {}		: dont run
+			# echo   | xargs -I {} echo {} "x"	: dont run
+			# echo   | xargs -I {} echo    "x"	: dont run
+			# echo x | xargs -I {} echo 		: run
+			# echo xx | xargs -I {} -d 'x' echo {}	: run 3 times ('', '', '\n')
+
+#			if not x or not x[0]:
+			if not x:
+				return 0
+		except StopIteration:
 			return 0
-		arg_iter = itertools.chain([arg], arg_iter)
+	else:
+		try:
+			arggroup_iter.peek()
+		except StopIteration:
+			arggroup_iter = [[]]
 
-	# if -I, max_chars might be 0 at this point, so check against None
-	if xargs_args.max_chars is not None and xargs_args.exit:
-		arg_iter = list(arg_iter)
-		if arg_iter and arg_iter[-1].charc > xargs_args.max_chars:
-			return 1
-
-	# phase 3: group args
-	arggroup_iter = group_args(
-		xargs_args.max_chars,
-		xargs_args.max_args,
-		xargs_args.max_lines,
-		arg_iter
-	)
-
-	# phase 4: build command-lines
+	# phase 3: build command-lines
 	if xargs_args.replace_str:
 		cmdline_iter = build_cmdlines_replace(
 			xargs_args.command,
@@ -262,16 +309,19 @@ def main(xargs_args):
 			arggroup_iter
 		)
 
-	if xargs_args.max_chars and xargs_args.exit:
-		cmdline_iter = itertools.takewhile(lambda c: str_memsize(*c) < xargs_args.max_chars, cmdline_iter)
-		# TODO return 1 if cmdline has been dropped
+	if xargs_args.max_chars is not None and xargs_args.exit:
+		cmdline_iter = check_items(
+			lambda c: str_memsize(*c) < xargs_args.max_chars,
+			lambda: sys.exit(1),
+			cmdline_iter
+		)
 
 	if xargs_args.interactive:
 		cmdline_iter = prompt_user(cmdline_iter)
 	elif xargs_args.verbose:
 		cmdline_iter = tee_cmdline(cmdline_iter)
 
-	# phase 5: execute command-lines
+	# phase 4: execute command-lines
 	if xargs_args.max_procs > 1:
 		ps = [None] * xargs_args.max_procs
 		environ = os.environ.copy()
@@ -321,6 +371,14 @@ if __name__ == "__main__":
 	# -p implies -t
 	if xargs_args.interactive and not xargs_args.verbose:
 		xargs_args.verbose = True
-	# TODO? if -d then -L equals -n
+
+	# (undocumented)
+	# if -d then -L equals -n
+	if xargs_args.delimiter and xargs_args.max_lines:
+		xargs_args.max_args = xargs_args.max_lines
+		xargs_args.max_lines = None
+	# TODO? -I implies -r
+	if xargs_args.replace_str and not xargs_args.no_run_if_empty:
+		xargs_args.no_run_if_empty = True
 
 	sys.exit(main(xargs_args))
